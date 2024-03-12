@@ -1,0 +1,246 @@
+Program.Sub.ScreenSU.Start
+Gui.F_Login..Create
+Gui.F_Login..Caption("LOGIN")
+Gui.F_Login..Size(3720,2595)
+Gui.F_Login..MinX(0)
+Gui.F_Login..MinY(0)
+Gui.F_Login..Position(0,0)
+Gui.F_Login..BackColor(-2147483633)
+Gui.F_Login..MousePointer(0)
+Gui.F_Login.txtUser.Create(TextBox,"",True,1665,300,0,1605,330,True,0,"Arial",8,-2147483643,1)
+Gui.F_Login.txtPW.Create(TextBox,"",True,1635,300,0,1605,825,True,0,"Arial",8,-2147483643,1)
+Gui.F_Login.txtPW.PasswordChar("*")
+Gui.F_Login.lblUser.Create(Label,"GSS USER",True,1260,255,0,330,405,True,0,"Arial",8,-2147483633,0)
+Gui.F_Login.lblPW.Create(Label,"PASSWORD",True,1395,255,0,195,885,True,0,"Arial",8,-2147483633,0)
+Gui.F_Login.cmdOK.Create(Button)
+Gui.F_Login.cmdOK.Size(855,375)
+Gui.F_Login.cmdOK.Position(600,1395)
+Gui.F_Login.cmdOK.Caption("OK")
+Gui.F_Login.cmdOK.Event(Click,cmdOK_Click)
+Gui.F_Login.cmdCancel.Create(Button)
+Gui.F_Login.cmdCancel.Size(855,375)
+Gui.F_Login.cmdCancel.Position(1785,1410)
+Gui.F_Login.cmdCancel.Caption("Cancel")
+Gui.F_Login.cmdCancel.Event(Click,cmdCancel_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+v.Global..BulkDeclareString(sError,sJob,sSuffix,sSeq,sEmp,sLeave,sMsg,sUser)
+v.Global..BulkDeclareLong(iQty,iScrap,iGroup)
+v.Global.bGroup.Declare(Boolean)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'15754  SCAN BARCODE
+'15951 Start job from work center dispatch
+'15934 Start Job button or double click from jobs view
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+
+f.ODBC.Connection!con.openconnection(v.Ambient.PDSN,v.Ambient.PUser,v.Ambient.PPass)
+
+
+
+v.Global.sjob.Set(v.Passed.009990)
+v.Global.sSuffix.Set(v.Passed.009991)
+v.Global.sSeq.Set(v.Passed.009992)
+v.Global.sEmp.Set(v.Passed.009993)
+
+
+f.Intrinsic.Control.If(v.Global.sjob.left1,=,"Z")
+	F.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndIf
+'this checks to see if there are open material sequences
+'f.Intrinsic.Control.CallSub(get_sequence)
+'this checks to see if there are any open labor sequences prior to the current sequence
+f.Intrinsic.Control.CallSub(check_open)
+'this checks the user rights of the current employee updating the job
+f.Intrinsic.Control.CallSub(check_security)
+
+
+		
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Main.End
+
+Program.Sub.unload.Start
+f.ODBC.Connection!con.Close
+f.Intrinsic.Control.End
+Program.Sub.unload.End
+
+Program.Sub.get_sequence.Start
+F.Intrinsic.Control.SetErrorHandler("Get_Sequence_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSql.Declare(String)
+v.Local.sRet.Declare(String)
+V.Local.iRet.Declare(Long)
+v.Local.sParams.Declare(String)
+
+'checking to see if this is the last sequence.  If it's not, nothing else matters, exit program.
+f.Intrinsic.String.Build("select SEQ from v_job_operations where job = '{0}' and suffix = '{1}' and LMO = 'M' and seq < '{2}'",v.Global.sjob,v.Global.sSuffix,v.Global.sSeq,v.Local.sSql)
+f.ODBC.Connection!con.executeandreturn(v.Local.sSql,v.Local.sRet)
+f.Intrinsic.Control.If(v.Local.sRet,>,"")
+	f.Intrinsic.UI.Msgbox("Material has not been issued.  Issue now?","OPEN MATERIAL RECORDS",4,v.Local.iRet)
+	F.Intrinsic.Control.if(v.Local.iRet,=,6)
+		F.Intrinsic.String.Build("{0}!*!{1}!*! !*! !*! !*! !*! ",V.Global.sJob,v.Global.sSuffix,V.Local.sParams)
+		F.Global.General.CallWrapperSync(450150,V.Local.sParams)
+	f.Intrinsic.Control.Else
+		v.Passed.777777.Set(1)
+		f.Intrinsic.Control.CallSub(unload)
+	F.Intrinsic.Control.EndIf
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Get_Sequence_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.get_sequence.End
+
+Program.Sub.check_open.Start
+F.Intrinsic.Control.SetErrorHandler("check_open_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.ssql.Declare(String)
+v.Local.sRet.Declare(String)
+
+'check to make sure there are no open sequences.
+f.Intrinsic.String.Build("select seq from v_job_operations where job = '{0}' and suffix = '{1}' and LMO = 'L' and flag_closed <> 'Y' AND seq < '{2}'",v.Global.sjob,v.Global.sSuffix,v.Global.sSeq,v.Local.sSql)
+f.ODBC.Connection!con.executeandreturn(v.Local.ssql,v.Local.sRet)
+f.Intrinsic.Control.If(v.local.sRet,>,"")
+	f.Intrinsic.String.Replace(v.Local.sRet,"#$#",", ",v.Global.sMsg)
+	F.Intrinsic.String.Build("Previous labor steps have not been closed: {0}",v.Global.sMsg,v.Global.sMsg)
+f.Intrinsic.Control.Else
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("check_open_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.check_open.End
+
+Program.Sub.check_security.Start
+F.Intrinsic.Control.SetErrorHandler("check_security_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.bGroup.Declare(Boolean)
+v.Local.sMessage.Declare(String)
+v.Local.iRet.Declare(Long)
+
+'get the emp security
+f.Global.Security.GetUserFromEmpNo(v.Global.sEmp,v.Global.sUser)
+f.Global.Security.IsInGroup(v.Global.sUser,"GUIMGMT",V.Global.bGroup)
+'if this employee is a member of the user group, we don't care.  We are just telling them we have open sequences.
+f.Intrinsic.Control.If(v.Local.bGroup,=,True)
+	F.Intrinsic.String.Build("{0}  Continue?",v.Global.sMsg,v.Local.sMessage)
+	f.Intrinsic.UI.Msgbox(v.Local.sMessage,"WARNING!",4,V.Local.iRet)
+	f.Intrinsic.Control.If(v.Local.iRet,=,6)
+		f.Intrinsic.Control.CallSub(unload)
+	f.Intrinsic.Control.Else
+		v.Passed.777777.Set(1)
+		f.Intrinsic.Control.CallSub(unload)
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.Else
+'if this employee is NOT a member of "GUIMGMT", then we have to get permission from someone else to continue
+	f.Intrinsic.String.Build("APPROVAL REQUIRED, {0}.  Continue?",V.Global.sMsg,v.Local.sMessage)
+	f.Intrinsic.UI.Msgbox(v.Local.sMessage,"WARNING!",4,v.Local.iRet)
+	f.Intrinsic.Control.If(v.Local.iRet,=,6)
+		f.Intrinsic.Control.CallSub(pop_form)
+	f.Intrinsic.Control.Else
+		v.Passed.777777.Set(1)
+		f.Intrinsic.Control.CallSub(unload)
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("check_security_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.check_security.End
+Program.Sub.cmdOK_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdOK_click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sUser.Declare(String)
+v.Local.sPass.Declare(String)
+v.Local.bLogin.Declare(boolean)
+v.Local.bMember.Declare(boolean)
+Function.Intrinsic.Debug.Stop
+
+v.Local.sUser.Set(v.Screen.F_Login!txtUser.text)
+v.Local.sPass.Set(v.Screen.F_Login!txtPW.text)
+f.Global.Security.ValidateUser(v.Caller.CompanyCode,v.Local.sUser.Trim,v.Local.sPass.Trim,v.Local.bLogin)
+
+f.Global.Security.IsInGroup(v.Local.sUser,"GUIMGMT",v.Local.bMember)
+
+f.Intrinsic.Control.If(v.Local.bLogin,=,True,AND,V.Local.bMember,=,True)
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.Else
+	gui.F_Login.txtUser.Text("")
+	gui.F_Login.txtPW.Text("")
+	gui.F_Login..visible(False)
+	f.Intrinsic.Control.CallSub(pop_form)
+f.Intrinsic.Control.EndIf
+
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdOK_click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.cmdOK_Click.End
+
+Program.Sub.cmdCancel_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdCancel_click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Passed.777777.Set(1)
+f.Intrinsic.UI.Msgbox("Process Cancelled, no transaction will be posted","TRANSACTION CANCELLED")
+f.Intrinsic.Control.CallSub(unload)
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdCancel_click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.cmdCancel_Click.End
+
+Program.Sub.pop_form.Start
+F.Intrinsic.Control.SetErrorHandler("pop_form_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+gui.F_Login..Show
+
+F.Intrinsic.Control.Label("pop_form_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.pop_form.End
